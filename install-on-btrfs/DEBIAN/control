@@ -1,0 +1,11 @@
+Package: install-btrfs
+Version: 0.1.1
+Section: backup
+Priority: extra
+Architecture: all
+Maintainer: Jakobus Schürz <xundeenergie@gmail.com>
+Homepage: http://github.com/xundeenergie/install-btrfs
+Provides: install-btrfs
+Depends: btrfs-progs
+Description: Prepare a new system for installing on btrfs, to use mkbackup-btrfs 
+ Creates various btrfs-subvolumes on a newly created partition with btrfs and a /etc/fstab to mount all this subvolumes to install a new system with (grml-)debootstrap.

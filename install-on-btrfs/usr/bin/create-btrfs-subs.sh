@@ -1,29 +1,115 @@
 #!/bin/bash
 
-case $1 in
-    -h)
-        cat <<EOF
- Create a partition with btrfs
- Mount it to a free mountpoint (for example /mnt)
- change directory to this mountpoint (cd /mnt)
- run this script
-EOF
-        exit 0
-        ;;
-    *)
-        ;;
-esac
+echo PWD: $PWD
+exit 0
+exitus () {
+    echo "ENDE $1 $2"
+    case $1 in
+        0)
+            echo "end $2"
+            exit 0
+            ;;
+        1)
+            echo "exit $2"
+            exit 1
+            ;;
+        *)
+            echo "exit $2"
+            exit $1
+            ;;
+    esac
 
+}
+
+ANW=$0
+
+# Set defaults
 SUBS="boot-grub-x86_64-efi home opt srv subs usr-local var-cache var-lib-mpd var-lib-named var-log var-opt var-spool var-spool-dovecot var-mail var-tmp var-virutal_machines var-www"
 ARCH="amd64"
 DIST="stretch"
 MAIN="@debian-${DIST}"
 ALWAYS="__ALWAYSCURRENT__"
-SSD=true
+DEVICE=""
+TARGET=""
+
+# Parse commandline
+set -- $(getopt "A:a:D:d:hH:m:T:" "$@" )
+
+while test $# -gt 1 ; do
+    case $1 in
+        -A)
+            ARCH=$2
+            shift; shift
+            ;;
+        -a)
+            ALWAYS=$2
+            shift; shift
+            ;;
+        -D)
+            DEVICE=$2
+            DEV=${DEVICE#/dev/}
+            shift; shift
+            ;;
+        -d)
+            DIST=$2
+            shift; shift
+            ;;
+        -h)
+            cat <<EOF
+ Create a partition with btrfs
+ Mount it to a free mountpoint (for example /mnt)
+ change directory to this mountpoint (cd /mnt)
+ run this script
+EOF
+            shift
+            exit 0
+            ;;
+        -m)
+            MAIN=$2
+            shift; shift
+            ;;
+        -T)
+            TARGET=$2
+            DEV=$(awk '$9 == "btrfs" && ($5 == targ || $10 == dev) {gsub("/dev/","",$10);print $10}' targ="${TARGET%/}" dev="$DEVICE" /proc/self/mountinfo|uniq)
+            shift; shift
+            ;;
+        --)
+            break
+            ;;
+        *)
+            echo "unbekannte Option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+if test -z "$DEVICE" -a -z "$TARGET"; then
+    echo "No target or device given -> exit"
+    exit 1
+fi
+
+if test -n $TARGET; then
+:
+fi
+
+echo DEV $DEV
+if test -e /dev/$DEV; then
+    ROT=$(cat /sys/block/$(printf '%s' "$DEV" | sed 's/[0-9]//g')/queue/rotational 2>/dev/null || echo 1 )
+    echo ROT: $ROT
+    if test $ROT -eq 0; then
+        SSD=true
+    else
+        SSD=false
+    fi
+else
+    echo "/dev/$DEV does not exist"
+    exit 2
+fi
+
 
 NO=""
 RELATIME="rel" #rel or no or empty
-if SSD
+if $SSD
 then
 	SSDOPTS=",ssd,discard"
 	NO="no"
@@ -39,25 +125,25 @@ MKDIR=/bin/mkdir
 MOUNT=/bin/mount
 DEBOOTSTRAP=/usr/sbin/debootstrap
 SYSTEMDESCAPE=/bin/systemd-escape
+exit
 
 $BTRFS sub create "$MAIN"
 $BTRFS sub create "$ALWAYS"
 
 UUID=$($BLKID -s UUID -o value $($FINDMNT|$GREP $(pwd)|$AWK '{print $2}'))
 
+
 cd "$ALWAYS"
 for i in $SUBS
 do
 	"$BTRFS" sub create "$i"
-        #$MKDIR -p "../${MAIN}/$(echo $i|sed 's@-@/@g')"
-	#$MOUNT "UUID=${UUID}" "../${MAIN}/$(echo $i|sed 's@-@/@g')" -t btrfs -o "defaults,compress=lzo,${NO}space_cache,${NO}inode_cache,${RELATIME}atime${SSDOPTS},subvol=${ALWAYS}/${i}"
 	$MKDIR -p "../${MAIN}/$($SYSTEMDESCAPE -pu $i)"
 	$MOUNT "UUID=${UUID}" "../${MAIN}/$($SYSTEMDESCAPE -pu $i)" -t btrfs -o "defaults,compress=lzo,${NO}space_cache,${NO}inode_cache,${RELATIME}atime${SSDOPTS},subvol=${ALWAYS}/${i}"
 done
 cd ..
 mkdir -p "${MAIN}/etc"
 
-echo "UUID=$UUID	/	btrfs	defaults,compress=lzo,${NO}nospace_cache,${NO}inode_cache,${RELATIME}atime${SSDOPTS}	0	0" > "${MAIN}/etc/fstab"
+echo "UUID=$UUID	/	btrfs	defaults,compress=lzo,${NO}space_cache,${NO}inode_cache,${RELATIME}atime${SSDOPTS}	0	0" > "${MAIN}/etc/fstab"
 echo "UUID=$UUID	/var/cache/btrfs_pool_SYSTEM	btrfs	defaults,compress=lzo,${NO}space_cache,${NO}inode_cache,${RELATIME}atime${SSDOPTS},subvol=/	0	0" >> "${MAIN}/etc/fstab"
 
 for i in $SUBS
@@ -76,6 +162,8 @@ cp "${MAIN}/etc/fstab" "${MAIN}/etc/fstab.orig"
 #Install with debootstrap? [Y/n]
 #EOF
 #
+if [ ! -t 0 ]; then
+
 #read i
 #case i in
 #    N|n)
@@ -93,14 +181,15 @@ cp "${MAIN}/etc/fstab" "${MAIN}/etc/fstab.orig"
 
         chroot "${MAIN}"
         cat <<EOF 
-        You are now in the chroot, groundsystem is now installed. Now install other packages.
-        add new users, and add them to several groups
-        add grub2 or refind and initramfs
-        try apt install linux-image task-desktop task-german-desktop console-setup tzdata
+    You are now in the chroot, groundsystem is now installed. Now install other packages.
+    add new users, and add them to several groups
+    add grub2 or refind and initramfs
+    try apt install linux-image task-desktop task-german-desktop console-setup tzdata
 EOF
 #        ;;
 #esac
 
+fi
 
 
 
